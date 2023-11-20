@@ -1,12 +1,127 @@
 openai-api-function-call-sample
 ======
 
-This is a sample project that serves as a proof of concept to demonstrate using OpenAI Assistans API with multiple users. We will be implementing a simple web socket full stack application using Node.js Express and socket.io for the server, and Vue.js for the client.
+This sample project is a proof-of-concept (POC) demonstration of the [OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)’s capability to handle single-threaded interactions with multiple users. It features a full-stack application that utilizes a **Node.js Express** server and a **Vue.js** client. The application employs **socket.io** to facilitate bidirectional communication via websockets between the server and client applications.
+
+---
+
+このサンプルプロジェクトは、[OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)がシングルスレッドで複数のユーザーとの対話を処理する能力をデモンストレーションするためのプルーフ・オブ・コンセプトです。これは、**Node.js Express**サーバーと**Vue.js**クライアントを使用したフルスタックアプリケーションで、**socket.io**を使用してサーバーとクライアントアプリケーション間のウェブソケットを介した双方向通信を実現しています。
+
 
 # App
 
 ![Sample discussion](./docs/screenshot1.png "Sample discussion")
 
+When you first run the client application, you will be asked to provide a nickname.
+
+![Nickname](./docs/screenshot3.png "Nickname")
+
+The nickname you entered will then be used as additional info for the AI.
+
+```javascript
+const run = await openai.startRun({ 
+    threadId: thread_id,
+    instructions: assistant_instructions + `\nPlease address the user as ${socket_user_name}.\nToday is ${new Date()}.`
+    })
+```
+
+# Assistants API
+
+This app requires that the Assistant be made in the [Playground](https://platform.openai.com/assistants) for simplicity.
+Just copy the assistant id and [edit the .env for the server](#nodejs-express-server).
+
+![Assistant](./docs/screenshot2.png "Assistant")
+
+When the first user connects to the server, a new thread is created and its `thread id` stored.
+I also get the instructions and name of the Assistant at the same time.
+
+```javascript
+const assistant = await openai.beta.assistants.retrieve(process.env.OPENAI_ASSISTANT_ID)
+assistant_name = assistant.name
+assistant_instructions = assistant.instructions
+
+const thread = await openai.beta.threads.create()
+
+thread_id = thread.id
+```
+
+If the thread has been running already, previous messages will be retrieved and sent to the user.
+
+```javascript
+const message_list = await openai.beta.threads.messages.list(thread_id)
+
+socket.emit('message-list', message_list)
+```
+
+When the user sends a message, first, it will be broadcast to the others using **socket.io** emit function and then it will be added to the thread and a run will be started.
+
+```javascript
+socket.on('message', async (message) => {
+
+    // send messages to other connected users
+    socket.broadcast.emit('message', message)
+
+    try {
+
+        const message_id = message.id
+
+        const ret_message = await openai.beta.threads.messages.create(thread_id, message)
+
+        const run = await openai.beta.threads.runs.create(
+            thread_id,
+            {
+                assistant_id: process.env.OPENAI_ASSISTANT_ID,
+                instructions: assistant_instructions + `\nPlease address the user as ${user_name}.\nToday is ${new Date()}.`
+            }
+        )
+        
+        ...
+        
+    } catch(error) {
+        console.log(error)
+    }
+
+})
+```
+
+When the run starts, we will then use a **do while loop** to wait until the status became `completed`. Please note that for simplicity, we will not be handling any **function calling**. In case your Assistant have function call, and it is invoked, the response will be:
+
+```javascript
+{ status: 'error', message: 'No function found' }
+```
+
+After the status becomes `completed`, we will then take the newest messages. The retrieve message function will actually send all the messages in the thread. But we will store the last message id in the metadata to know the last message to cutoff.
+
+```javascript
+const last_message_id = user_message.id
+
+metadata['id'] = last_message_id
+
+const ret_message = await await openai.beta.threads.messages.create(thread_id, {
+    role: 'user',
+    content: user_message,
+    metadata,
+})
+
+...
+
+const all_messages = await openai.beta.threads.messages.list(thread_id)
+
+let new_messages = []
+
+for(let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+
+    if(msg.metadata.id === message_id) {
+        break
+    } else {
+        ...
+    }
+}
+
+socket.broadcast.emit('message-list', new_messages) // to others
+socket.emit('message-list', new_messages) // to sender
+```
 
 
 # Setup
