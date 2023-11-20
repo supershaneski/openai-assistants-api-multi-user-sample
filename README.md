@@ -33,7 +33,8 @@ Just copy the assistant id and [edit the .env for the server](#nodejs-express-se
 ![Assistant](./docs/screenshot2.png "Assistant")
 
 When the first user connects to the server, a new thread is created and its `thread id` stored.
-I also get the instructions and name of the Assistant at the same time.
+In this demo, we will be just storing the thread id in a simple global variable.
+I will also get the ***instructions*** and ***name*** of the **Assistant** at the same time which will be useful for displaying the Assistant name in the client UI and appending instruction during run, respectively.
 
 ```javascript
 const assistant = await openai.beta.assistants.retrieve(process.env.OPENAI_ASSISTANT_ID)
@@ -53,13 +54,17 @@ const message_list = await openai.beta.threads.messages.list(thread_id)
 socket.emit('message-list', message_list)
 ```
 
-When the user sends a message, first, it will be broadcast to the others using **socket.io** emit function and then it will be added to the thread and a run will be started.
+When the user sends a message, first, it will be broadcast to the others using **socket.io** emit function and then it will be added to the thread and a run will be started. I also send a **socket.io** event to disable input and send button in the clients and re-enables it again after response is received.
 
 ```javascript
 socket.on('message', async (message) => {
 
     // send messages to other connected users
     socket.broadcast.emit('message', message)
+
+    // disable input and button in client
+    socket.emit('ai-start')
+    socket.broadcast.emit('ai-start')
 
     try {
 
@@ -121,7 +126,23 @@ for(let i = 0; i < messages.length; i++) {
 
 socket.broadcast.emit('message-list', new_messages) // to others
 socket.emit('message-list', new_messages) // to sender
+
+// re-enables the input and button in clients
+socket.emit('ai-end')
+socket.broadcast.emit('ai-end')
 ```
+
+When the last user disconnects to the server, like by closing the browser, the thread id will be deleted.
+
+```sh
+{
+  id: 'thread_iL9IhwX5ds06UgbpG3zcyFQZ',
+  object: 'thread.deleted',
+  deleted: true
+}
+```
+
+Be sure to delete the threads properly because currently we do not have any API to retrieve running threads.
 
 
 # Setup
@@ -177,7 +198,7 @@ npm install
 
 Then, copy `.env.example` and rename it to `.env`.
 
-Now, if you edit the `SERVER_HOST` from `localhost` to actual IP Address, you also need to edit `VITE_SERVER_IPADDRESS` to that value. Leave the port numbers as is.
+Now, if you edit the `SERVER_HOST` from `localhost` to actual IP Address when you setup your server, you also need to edit `VITE_SERVER_IPADDRESS` to that value. Leave the port numbers as is.
 
 ```
 VITE_SERVER_IPADDRESS=localhost
