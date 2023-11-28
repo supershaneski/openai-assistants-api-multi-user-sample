@@ -15,6 +15,12 @@ coverage
 *.local
 .env
 .vscode/
+*.bu.js
+*.bu.py
+*.bu.md
+*.bu.css
+*.bu.json
+*.bu.html
 
 /cypress/videos/
 /cypress/screenshots/

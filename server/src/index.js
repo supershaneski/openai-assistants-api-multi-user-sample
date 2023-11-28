@@ -129,7 +129,7 @@ io.on('connection', (socket) => {
                 }
 
                 if(new_messages.length > 0) {
-                    socket.emit('message-list', new_messages)
+                    socket.emit('message_list', new_messages)
                 }
 
             } catch(error) {
@@ -153,8 +153,8 @@ io.on('connection', (socket) => {
         
         socket.broadcast.emit('message', message)
 
-        socket.emit('ai-start')
-        socket.broadcast.emit('ai-start')
+        socket.emit('ai_start')
+        socket.broadcast.emit('ai_start')
 
         try {
 
@@ -283,8 +283,8 @@ io.on('connection', (socket) => {
     
             } while(!flagFinish)
 
-            socket.broadcast.emit('message-list', messages_items)
-            socket.emit('message-list', messages_items)
+            socket.broadcast.emit('message_list', messages_items)
+            socket.emit('message_list', messages_items)
 
         } catch(error) {
 
@@ -304,8 +304,8 @@ io.on('connection', (socket) => {
 
         } finally {
 
-            socket.emit('ai-end')
-            socket.broadcast.emit('ai-end')
+            socket.emit('ai_end')
+            socket.broadcast.emit('ai_end')
 
         }
 
