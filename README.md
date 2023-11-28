@@ -232,6 +232,35 @@ app.post('/stream', async (req, res) => {
 }
 ```
 
+For client, edit the IP address
+
+```javascript
+async function sendToStream(user_message) {
+
+  isAIProcessing.value = true
+
+  state.messageEvents.push(user_message)
+
+  message.value = ''
+
+  resetScroll()
+
+  try {
+
+    const response = await fetch(`http://192.168.0.1:5020/stream`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(user_message)
+    })
+
+    ...
+    
+}
+```
+
 # Setup
 
 Clone the repository

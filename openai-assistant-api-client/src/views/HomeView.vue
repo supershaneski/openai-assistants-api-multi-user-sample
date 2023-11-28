@@ -55,7 +55,7 @@ async function sendToStream(user_message) {
 
   try {
 
-    const response = await fetch('http://192.168.1.80:5020/stream', {
+    const response = await fetch(`http://192.168.0.1:5020/stream`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
