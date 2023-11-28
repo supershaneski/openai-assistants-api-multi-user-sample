@@ -76,7 +76,6 @@ app.post('/stream', async (req, res) => {
             Connection: "keep-alive",
         })
 
-        //let messages_items = []
         let flagFinish = false
 
         let MAX_COUNT = 2 * 600 // 120s 
@@ -104,39 +103,24 @@ app.post('/stream', async (req, res) => {
                 for(let i = 0; i < messages.length; i++) {
                     const msg = messages[i]
 
-                    //console.log(JSON.stringify(msg, null, 2))
-                    
                     if (Object.prototype.hasOwnProperty.call(msg.metadata, 'id'))  {
                         if(msg.metadata.id === message_id) {
                             break
                         }
                     } else {
                         
-                        /*new_messages.push({
-                            user_id: null,
-                            name: assistant_name,
-                            id: msg.id,
-                            created_at: msg.created_at.toString().padEnd(13, 0),
-                            role: msg.role,
-                            content: msg.content[0].text.value
-                        })*/
-
                         const output_data = msg.content[0].text.value
                         const split_words = output_data.split(' ')
 
+                        // We will simulate streaming per word! :P
                         for(let word of split_words) {
-                            //if(word) {
-                                console.log("-", word)
-                                res.write(`${word} `)
-                                await utils.wait(100)
-                            //}
+                            res.write(`${word} `)
+                            await utils.wait(TIME_DELAY)
                         }
                         
                     }
 
                 }
-
-                //messages_items = new_messages
 
                 flagFinish = true
             
@@ -154,7 +138,6 @@ app.post('/stream', async (req, res) => {
 
                 required_tools.forEach((rtool) => {
                     
-                    // We will not handle function calling
                     let tool_output = { status: 'error', message: 'No function found' }
 
                     tool_output_items.push({
