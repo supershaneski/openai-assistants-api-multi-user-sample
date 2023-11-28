@@ -8,6 +8,8 @@ This sample project is a proof-of-concept (POC) demonstration of the [OpenAI Ass
 このサンプルプロジェクトは、[OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)がシングルスレッドで複数のユーザーとの対話を処理する能力をデモンストレーションするためのプルーフ・オブ・コンセプトです。これは、**Node.js Express**サーバーと**Vue.js**クライアントを使用したフルスタックアプリケーションで、**socket.io**を使用してサーバーとクライアントアプリケーション間のウェブソケットを介した双方向通信を実現しています。
 
 
+**Updated**: Added [mock streaming](#mock-streaming).
+
 # App
 
 ![Sample discussion](./docs/screenshot1.png "Sample discussion")
@@ -144,6 +146,91 @@ When the last user disconnects to the server, like by closing the browser, the t
 
 Be sure to delete the threads properly because currently we do not have any API to retrieve running threads.
 
+
+# Mock Streaming
+
+As of this writing, **Assistants API** has no streaming capability like **Chat Completions API**. However, we can simulate it by streaming the response. For this sample, I set aside a separate endpoint for streaming (e.g. /stream) outside socket.io handler. Just enable the toggle button at the bottom to start streaming.
+
+![Mock Streaming](./docs/screenshot4.png "Mock Streaming")
+
+For the server handling, check [stream endpoint](/server/src/index.js) handler
+
+```javascript
+app.post('/stream', async (req, res) => {
+
+    ...
+
+    const ret_message = await openai.addMessage({ 
+        threadId: thread_id, 
+        message: content, 
+        messageId: message_id, 
+        userId: user_id, 
+        name: name 
+    })
+    
+    const run = await openai.startRun({ 
+        threadId: thread_id,
+        instructions: assistant_instructions + `\nPlease address the user as ${name}.\nToday is ${new Date()}.`
+    })
+
+    const run_id = run.id
+
+    // Start streaming response
+    res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+    })
+
+    do {
+
+        const run_data = await openai.getRun({ threadId: thread_id, runId: run_id })
+
+        const status = run_data.status
+
+        if(status === 'completed') {
+
+            const messages = await openai.getMessages({ threadId: thread_id })
+
+            for(let i = 0; i < messages.length; i++) {
+                const msg = messages[i]
+
+                if (Object.prototype.hasOwnProperty.call(msg.metadata, 'id'))  {
+                    if(msg.metadata.id === message_id) {
+                        break
+                    }
+                } else {
+                    
+                    const output_data = msg.content[0].text.value
+                    const split_words = output_data.split(' ')
+
+                    // We will simulate streaming per word! :P
+                    for(let word of split_words) {
+                        // stream text
+                        res.write(`${word} `)
+                        // add delay
+                        await utils.wait(TIME_DELAY)
+                    }
+                    
+                }
+
+            }
+
+            flagFinish = true
+            
+        } else {
+
+            ...
+
+        }
+
+    } while(!flagFinish)
+
+    // End streaming
+    res.end()
+
+}
+```
 
 # Setup
 
