@@ -115,11 +115,9 @@ io.on('connection', (socket) => {
                 for(let i = 0; i < message_list.length; i++) {
                     const msg = message_list[i]
 
-                    //console.log(msg)
-
                     new_messages.push({
-                        user_id: null,
-                        name: assistant_name,
+                        user_id: msg.metadata ? msg.metadata.user_id : null,
+                        name: msg.metadata ? msg.metadata.name : assistant_name,
                         id: msg.id,
                         created_at: msg.created_at.toString().padEnd(13, 0),
                         role: msg.role,
@@ -129,7 +127,7 @@ io.on('connection', (socket) => {
                 }
 
                 if(new_messages.length > 0) {
-                    socket.emit('message_list', new_messages)
+                    socket.emit('message-list', new_messages)
                 }
 
             } catch(error) {
@@ -153,14 +151,14 @@ io.on('connection', (socket) => {
         
         socket.broadcast.emit('message', message)
 
-        socket.emit('ai_start')
-        socket.broadcast.emit('ai_start')
+        socket.emit('ai-start')
+        socket.broadcast.emit('ai-start')
 
         try {
 
             const message_id = message.id
 
-            const ret_message = await openai.addMessage({ threadId: thread_id, message: message.content, messageId: message_id })
+            const ret_message = await openai.addMessage({ threadId: thread_id, message: message.content, messageId: message_id, name: message.name })
 
             console.log('message', ret_message)
 
@@ -283,8 +281,8 @@ io.on('connection', (socket) => {
     
             } while(!flagFinish)
 
-            socket.broadcast.emit('message_list', messages_items)
-            socket.emit('message_list', messages_items)
+            socket.broadcast.emit('message-list', messages_items)
+            socket.emit('message-list', messages_items)
 
         } catch(error) {
 
@@ -304,8 +302,8 @@ io.on('connection', (socket) => {
 
         } finally {
 
-            socket.emit('ai_end')
-            socket.broadcast.emit('ai_end')
+            socket.emit('ai-end')
+            socket.broadcast.emit('ai-end')
 
         }
 
