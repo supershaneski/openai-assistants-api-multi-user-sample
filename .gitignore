@@ -19,6 +19,7 @@ coverage
 *.bu.py
 *.bu.md
 *.bu.css
+*.bu.vue
 *.bu.json
 *.bu.html
 

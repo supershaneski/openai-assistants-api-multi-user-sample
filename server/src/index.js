@@ -19,6 +19,11 @@ const io = new Server(server, {
     }
 })
 
+let assistant_instructions = ''
+let assistant_name = ''
+let thread_id = ''
+let users = []
+
 app.use(cors())
 //app.use(bodyParser.json())
 app.use(bodyParser.json({limit: '50mb'}))
@@ -30,10 +35,181 @@ app.get('/', (req, res) => {
 
 })
 
-let assistant_instructions = ''
-let assistant_name = ''
-let thread_id = ''
-let users = []
+app.post('/stream', async (req, res) => {
+
+    const { user_id, name, content, role, id, created_at } = req.body
+
+    if(!user_id || !name || !content || !role || !id || !created_at) {
+        res.sendStatus(400)
+        return
+    }
+    
+    // Note: 
+    // For simplicity or laziness, I will not be checking if assistant or thread is alive.
+    
+    try {
+
+        const message_id = id
+        
+        const ret_message = await openai.addMessage({ 
+            threadId: thread_id, 
+            message: content, 
+            messageId: message_id, 
+            userId: user_id, 
+            name: name 
+        })
+
+        console.log('message', ret_message)
+
+        const run = await openai.startRun({ 
+            threadId: thread_id,
+            instructions: assistant_instructions + `\nPlease address the user as ${name}.\nToday is ${new Date()}.`
+        })
+
+        console.log('run', run)
+
+        const run_id = run.id
+
+        res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+        })
+
+        //let messages_items = []
+        let flagFinish = false
+
+        let MAX_COUNT = 2 * 600 // 120s 
+        let TIME_DELAY = 100 // 100ms
+        let count = 0
+
+        do {
+
+            console.log(`Loop: ${count}`)
+
+            const run_data = await openai.getRun({ threadId: thread_id, runId: run_id })
+
+            const status = run_data.status
+
+            console.log(`Status: ${status} ${(new Date()).toLocaleTimeString()}`)
+
+            if(status === 'completed') {
+
+                const messages = await openai.getMessages({ threadId: thread_id })
+
+                console.log('messages-show', messages)
+
+                //let new_messages = []
+
+                for(let i = 0; i < messages.length; i++) {
+                    const msg = messages[i]
+
+                    //console.log(JSON.stringify(msg, null, 2))
+                    
+                    if (Object.prototype.hasOwnProperty.call(msg.metadata, 'id'))  {
+                        if(msg.metadata.id === message_id) {
+                            break
+                        }
+                    } else {
+                        
+                        /*new_messages.push({
+                            user_id: null,
+                            name: assistant_name,
+                            id: msg.id,
+                            created_at: msg.created_at.toString().padEnd(13, 0),
+                            role: msg.role,
+                            content: msg.content[0].text.value
+                        })*/
+
+                        const output_data = msg.content[0].text.value
+                        const split_words = output_data.split(' ')
+
+                        for(let word of split_words) {
+                            //if(word) {
+                                console.log("-", word)
+                                res.write(`${word} `)
+                                await utils.wait(100)
+                            //}
+                        }
+                        
+                    }
+
+                }
+
+                //messages_items = new_messages
+
+                flagFinish = true
+            
+            } else if(status === 'requires_action'){
+                
+                console.log('run-data', run_data)
+
+                const required_action = run_data.required_action
+                const required_tools = required_action.submit_tool_outputs.tool_calls
+
+                console.log('required-action', required_action)
+                console.log('required-tools', required_tools)
+                
+                const tool_output_items = []
+
+                required_tools.forEach((rtool) => {
+                    
+                    // We will not handle function calling
+                    let tool_output = { status: 'error', message: 'No function found' }
+
+                    tool_output_items.push({
+                        tool_call_id: rtool.id,
+                        output: JSON.stringify(tool_output)
+                    })
+
+                })
+
+                console.log('tools-output', tool_output_items)
+
+                const ret_tool = await submitOutputs({
+                    threadId: thread_id,
+                    runId: run_id,
+                    tool_outputs: tool_output_items
+                })
+
+                console.log('ret-tool', ret_tool)
+
+            } else if(status === 'expired' || status === 'cancelled' || status === 'failed') {
+                
+                flagFinish = true
+
+            }
+            
+            if(!flagFinish) {
+
+                count++
+                
+                if(count >= MAX_COUNT) {
+
+                    flagFinish = true
+
+                } else {
+
+                    await utils.wait(TIME_DELAY)
+
+                }
+
+            }
+
+        } while(!flagFinish)
+
+        res.end()
+
+    } catch(error) {
+
+        console.log(error.name, error.message)
+
+        res.sendStatus(400)
+        return
+
+    }
+
+})
 
 io.on('connection', (socket) => {
 
@@ -158,7 +334,7 @@ io.on('connection', (socket) => {
 
             const message_id = message.id
 
-            const ret_message = await openai.addMessage({ threadId: thread_id, message: message.content, messageId: message_id, name: message.name })
+            const ret_message = await openai.addMessage({ threadId: thread_id, message: message.content, messageId: message_id, userId: message.user_id, name: message.name })
 
             console.log('message', ret_message)
 
