@@ -149,7 +149,7 @@ Be sure to delete the threads properly because currently we do not have any API 
 
 # Mock Streaming
 
-As of this writing, **Assistants API** has no streaming capability like **Chat Completions API**. However, we can simulate it by streaming the response. For this sample, I set aside a separate endpoint for streaming (e.g. /stream) outside socket.io handler. Just enable the toggle button at the bottom to start streaming.
+As of this writing, **Assistants API** has no streaming capability like **Chat Completions API** does. However, we can simulate it by simply streaming the response. For this sample, I set aside a separate endpoint for streaming (e.g. /stream) outside socket.io handler. In the client app, just enable **streaming** from the toggle button at the bottom to start streaming.
 
 ![Mock Streaming](./docs/screenshot4.png "Mock Streaming")
 
@@ -232,22 +232,34 @@ app.post('/stream', async (req, res) => {
 }
 ```
 
-For client, edit the IP address
+When we receive the messages from the API, we break it down to single words then we send each word one by one, which simulates streaming behavior.
+
+```javascript
+const output_data = msg.content[0].text.value
+
+// divide output into words
+const split_words = output_data.split(' ')
+
+for(let word of split_words) {
+
+    // send one word at a time
+    res.write(`${word} `)
+
+    // add delay
+    await utils.wait(TIME_DELAY)
+}
+```
+
+For client side, we [handle it](/openai-assistant-api-client/src/views/HomeView.vue) separate from sending to socket.io handler
 
 ```javascript
 async function sendToStream(user_message) {
 
-  isAIProcessing.value = true
-
-  state.messageEvents.push(user_message)
-
-  message.value = ''
-
-  resetScroll()
+  ...
 
   try {
 
-    const response = await fetch(`http://192.168.0.1:5020/stream`, {
+    const response = await fetch(`http://${import.meta.env.VITE_SERVER_IPADDRESS}:${import.meta.env.VITE_SERVER_PORT}/stream`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -256,10 +268,53 @@ async function sendToStream(user_message) {
       body: JSON.stringify(user_message)
     })
 
-    ...
+    // message id for incoming message
+    const msg_id = getSimpleId()
+
+    // initialize assistant message
+    let assistant_message = { 
+      user_id: null,
+      name: 'CatGPT', 
+      content: '', 
+      role: 'assistant', 
+      id: msg_id, 
+      created_at: Date.now() 
+    }
+    state.messageEvents.push(assistant_message)
+
+    const reader = response.body.getReader()
+
+    let flag = true
+
+    while(flag) {
+
+      const { done, value } = await reader.read()
+
+      if(done) {
+        flag = false
+        break
+      }
+      
+      // receive stream
+      const text = new TextDecoder().decode(value)
+
+      // update assistant message using message id we saved from above
+      state.messageEvents = state.messageEvents.map((item) => {
+        return {
+          ...item,
+          content: item.id === msg_id ? item.content + text : item.content
+        }
+      })
+
+      ...
+
+    }
     
 }
 ```
+
+Since we are sending our message outside the socket.io handler, the message and response will not appear in the other connected users until they refresh. I have not yet checked if streaming is possible using socket.io.
+
 
 # Setup
 
