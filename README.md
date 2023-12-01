@@ -151,7 +151,7 @@ Be sure to delete the threads properly because currently we do not have any API 
 
 As of this writing, **Assistants API** has no streaming capability like **Chat Completions API** does. However, we can simulate it by simply streaming the response. For this sample, I set aside a separate endpoint for streaming (e.g. /stream) outside socket.io handler. In the client app, just enable **streaming** from the toggle button at the bottom to start streaming.
 
-![Mock Streaming](./docs/screenshot4.png "Mock Streaming")
+![Mock Streaming](./docs/assistant-api-streaming.gif "Mock Streaming")
 
 For the server handling, check [stream endpoint](/server/src/index.js) handler
 
