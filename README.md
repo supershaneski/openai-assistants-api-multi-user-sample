@@ -1,4 +1,4 @@
-openai-api-function-call-sample
+openai-assistants-api-multi-user-sample
 ======
 
 This sample project is a proof-of-concept (POC) demonstration of the [OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)’s capability to handle single-threaded interactions with multiple users. It features a full-stack application that utilizes a **Node.js Express** server and a **Vue.js** client. The application employs **socket.io** to facilitate bidirectional communication via websockets between the server and client applications.
