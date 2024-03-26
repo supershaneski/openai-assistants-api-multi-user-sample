@@ -353,17 +353,6 @@ io.on('connection', async (socket) => {
     let socket_user_id = ''
     let socket_user_name = ''
 
-    ///
-    /*
-    try {
-        const ret = await openai.deleteThread({ threadId: 'thread_MVfi6X4yL3l3kuA0LEIBW0Sq' })
-        console.log(ret)
-    } catch(error) {
-        console.log(error.name, error.message)
-    }
-    */
-    ////
-
     users.push({ id: socket_id, user_id: '', name: '' })
 
     socket.on('disconnect', async () => {
