@@ -182,6 +182,7 @@ res.end()
 Now, to support function calling, we will need **submitToolOutputsStream** which is [not written in the Reference page](https://platform.openai.com/docs/api-reference/runs/submitToolOutputs). I had to [dig in the github repository](https://github.com/openai/openai-node/blob/d4673f1b089d3b74cfc0bd3c589092a06f5b6eeb/helpers.md) of OpenAI Node.js module to find it. But it was not clear how or when to call it. Here is how I made it work but perhaps there is more elegant way. Updating our previous code:
 
 ```javascript
+
 // Setup SSE for streaming response in Node.js
 res.writeHead(200, {
     'Content-Type': 'text/event-stream',
