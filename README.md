@@ -8,6 +8,7 @@ This sample project is a proof-of-concept (POC) demonstration of the [OpenAI Ass
 このサンプルプロジェクトは、[OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)がシングルスレッドで複数のユーザーとの対話を処理する能力をデモンストレーションするためのプルーフ・オブ・コンセプトです。これは、**Node.js Express**サーバーと**Vue.js**クライアントを使用したフルスタックアプリケーションで、**socket.io**を使用してサーバーとクライアントアプリケーション間のウェブソケットを介した双方向通信を実現しています。
 
 
+**Updated**: [2024-03-26] Implemented actual [Assistants API streaming](#assistants-api-streaming).
 **Updated**: Added [mock streaming](#mock-streaming).
 
 # App
@@ -147,7 +148,139 @@ When the last user disconnects to the server, like by closing the browser, the t
 Be sure to delete the threads properly because currently we do not have any API to retrieve running threads.
 
 
+# Assistants API Streaming
+
+Since OpenAI now [supports **streaming**](https://platform.openai.com/docs/assistants/overview/step-4-create-a-run) for Assistants API, I have updated the streaming endpoint using the actual streaming functions. You will need to update your OpenAI Node.js module to the latest version.
+
+It tooks me some time to figure out how to implement function calling using streaming so I hope this will help others.
+
+There are other ways to run streaming but we will use the one in the documentation page example: **createAndStream**. Let's start with just normal text response without any tools.
+
+```javascript
+// Setup SSE for streaming response in Node.js
+res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+})
+
+const run = openai.openai.beta.threads.runs.createAndStream(
+    thread_id,
+    { assistant_id: assistant_id }
+)
+.on('textDelta', (delta, snapshot) => {
+    // Send partial text to the client
+    res.write(delta.value)
+})
+
+const result = await run.finalRun()
+
+// End streaming
+res.end()
+```
+
+Now, to support function calling, we will need **submitToolOutputsStream** which is [not written in the Reference page](https://platform.openai.com/docs/api-reference/runs/submitToolOutputs). I had to [dig in the github repository](https://github.com/openai/openai-node/blob/d4673f1b089d3b74cfc0bd3c589092a06f5b6eeb/helpers.md) of OpenAI Node.js module to find it. But it was not clear how or when to call it. Here is how I made it work but perhaps there is more elegant way. Updating our previous code:
+
+```javascript
+// Setup SSE for streaming response in Node.js
+res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+})
+
+// Some variable we will need to save the tool calling
+let tool_called = {}
+
+const run = openai.openai.beta.threads.runs.createAndStream(
+    thread_id,
+    { assistant_id: assistant_id }
+)
+.on('textDelta', (delta, snapshot) => {
+    // Send partial text to the client
+    res.write(delta.value)
+})
+.on('toolCallCreated', (toolCall) => {
+    // Tool call is first invoked
+    tool_called[toolCall.id] = toolCall.function
+})
+.on('toolCallDelta', (toolCallDelta, snapshot) => {
+    if(toolCallDelta.type === 'function') {
+        // Assemble the tool arguments
+        tool_called[snapshot.id].arguments += toolCallDelta.function.arguments
+    }
+})
+.on('event', async (event) => {
+    
+    if(event.data.status === 'requires_action') {
+
+        // We will just show some intermediate message while processing tool but you can omit this
+        res.write(`Processing your request, please wait…\n\n`)
+
+        // We will process the tool call here
+        let tool_outputs = []
+
+        for(let tool_key in tool_called) {
+
+            const tool_name = tool_called[tool_key].name
+            const tool_args = JSON.parse(tool_called[tool_key].arguments)
+
+            // Put your tool processing API here...
+            const tool_output = { status: 'success' }
+
+            tool_outputs.push({
+                tool_call_id: tool_key,
+                output: JSON.stringify(tool_output)
+            })
+
+        }
+
+        // Submit tool output
+        const stream = await openai.openai.beta.threads.runs.submitToolOutputsStream(
+            thread_id,
+            event.data.id,
+            {
+                tool_outputs
+            }
+        )
+
+        // After submitting tool output, the code at the bottom will be called first
+        // so we need to check the status if it requires action/submit_tool_outputs.
+
+        for await (const event of stream) {
+            try {
+                
+                if(event.event === 'thread.message.delta') {
+                    // Stream text response to the client
+                    res.write(event.data.delta.content[0].text.value)
+                }
+                
+            } catch(e) {
+                console.log(e.message)
+            }
+        }
+        
+        res.end()
+
+    }
+})
+
+const result = await run.finalRun()
+
+if(result.status === 'requires_action') {
+    if(result.required_action.type === 'submit_tool_outputs') {
+        // Do nothing
+    }
+} else {
+    // End streaming
+    res.end()
+}
+```
+
+
 # Mock Streaming
+
+> Note: OpenAI releases streaming support for Assistants API on March 14th, 2024. I have implemented the previous streaming function to th actual streaming. See [previous section](#assistants-api-streaming).
 
 As of this writing, **Assistants API** has no streaming capability like **Chat Completions API** does. However, we can simulate it by simply streaming the response. For this sample, I set aside a separate endpoint for streaming (e.g. /stream) outside socket.io handler. In the client app, just enable **streaming** from the toggle button at the bottom to start streaming.
 

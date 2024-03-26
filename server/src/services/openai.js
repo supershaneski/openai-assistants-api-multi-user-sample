@@ -222,6 +222,7 @@ async function chatCompletion({
 }
 
 module.exports = {
+    openai,
     getAssistant,
     createThread,
     getThread,

@@ -35,7 +35,158 @@ app.get('/', (req, res) => {
 
 })
 
+
 app.post('/stream', async (req, res) => {
+
+    const { user_id, name, content, role, id, created_at } = req.body
+
+    if(!user_id || !name || !content || !role || !id || !created_at) {
+        res.sendStatus(400)
+        return
+    }
+    
+    try {
+
+        const message_id = id
+        
+        const ret_message = await openai.addMessage({ 
+            threadId: thread_id, 
+            message: content, 
+            messageId: message_id, 
+            userId: user_id, 
+            name: name 
+        })
+
+        res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+        })
+
+        let tool_called = {}
+
+        const run = openai.openai.beta.threads.runs.createAndStream(
+            thread_id,
+            { assistant_id: process.env.OPENAI_ASSISTANT_ID }
+        )
+        .on('event', async (event) => {
+            
+            console.log('event', event)
+            
+            if(event.data.status === 'requires_action') {
+
+                let tool_outputs = []
+
+                for(let tool_key in tool_called) {
+                    console.log(tool_key, tool_called[tool_key])
+
+                    const tool_name = tool_called[tool_key].name
+                    const tool_args = JSON.parse(tool_called[tool_key].arguments)
+
+                    const tool_output = utils.mockAPI(tool_name, tool_args)
+
+                    tool_outputs.push({
+                        tool_call_id: tool_key,
+                        output: JSON.stringify(tool_output)
+                    })
+
+                }
+
+                res.write(`Processing your request, please wait…\n\n`)
+
+                const stream = await openai.openai.beta.threads.runs.submitToolOutputsStream(
+                    thread_id,
+                    event.data.id,
+                    {
+                      tool_outputs
+                    }
+                )
+
+                for await (const event of stream) {
+                    try {
+                        
+                        if(event.event === 'thread.message.delta') {
+                            res.write(event.data.delta.content[0].text.value)
+                        }
+                        
+                    } catch(e) {
+                        console.log(e.message)
+                    }
+                }
+
+                res.end()
+
+            }
+        })
+        .on('textCreated', (delta, snapshot) => console.log('textCreated', delta, snapshot))
+        .on('textDelta', (delta, snapshot) => {
+            console.log('textDelta', delta, snapshot)
+            res.write(delta.value)
+        })
+        .on('messageDelta', (delta, snapshot) => console.log('messageDelta1', snapshot))
+        .on('toolCallCreated', (toolCall) => {
+            
+            console.log('tooCallCreated', toolCall)
+
+            tool_called[toolCall.id] = toolCall.function
+
+        })
+        .on('toolCallDelta', (toolCallDelta, snapshot) => {
+            if (toolCallDelta.type === 'code_interpreter') {
+                if (toolCallDelta.code_interpreter.input) {
+                  //console.log(toolCallDelta.code_interpreter.input)
+                }
+                if (toolCallDelta.code_interpreter.outputs) {
+                  //console.log("\noutput >\n")
+                  toolCallDelta.code_interpreter.outputs.forEach(output => {
+                    if (output.type === "logs") {
+                      //console.log(`\n${output.logs}\n`)
+                    }
+                  })
+                }
+            } else if(toolCallDelta.type === 'function') {
+                
+                console.log(toolCallDelta, snapshot)
+
+                tool_called[snapshot.id].arguments += toolCallDelta.function.arguments
+
+            } else {
+                console.log(toolCallDelta)
+            }
+        })
+        .on('toolCallDone', (toolCall) => {
+            console.log('toolCallDone', toolCall)
+        })
+        .on('run', (run) => console.log('run', run))
+        .on('connect', () => console.log('connect'))
+
+        const result = await run.finalRun()
+
+        console.log(result)
+        
+        if(result.status === 'requires_action') {
+            if(result.required_action.type === 'submit_tool_outputs') {
+                // Do nothing
+            }
+        } else {
+            
+            console.log('End streaming...')
+        
+            res.end()
+
+        }
+
+    } catch(error) {
+
+        console.log(error.name, error.message)
+
+        res.sendStatus(400)
+
+    }
+
+})
+
+app.post('/stream2', async (req, res) => {
 
     const { user_id, name, content, role, id, created_at } = req.body
 
@@ -149,7 +300,7 @@ app.post('/stream', async (req, res) => {
 
                 console.log('tools-output', tool_output_items)
 
-                const ret_tool = await submitOutputs({
+                const ret_tool = await openai.submitOutputs({
                     threadId: thread_id,
                     runId: run_id,
                     tool_outputs: tool_output_items
@@ -194,13 +345,24 @@ app.post('/stream', async (req, res) => {
 
 })
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
 
     console.log('user connected', socket.id)
 
     let socket_id = socket.id
     let socket_user_id = ''
     let socket_user_name = ''
+
+    ///
+    /*
+    try {
+        const ret = await openai.deleteThread({ threadId: 'thread_MVfi6X4yL3l3kuA0LEIBW0Sq' })
+        console.log(ret)
+    } catch(error) {
+        console.log(error.name, error.message)
+    }
+    */
+    ////
 
     users.push({ id: socket_id, user_id: '', name: '' })
 
@@ -408,7 +570,7 @@ io.on('connection', (socket) => {
     
                     console.log('tools-output', tool_output_items)
     
-                    const ret_tool = await submitOutputs({
+                    const ret_tool = await openai.submitOutputs({
                         threadId: thread_id,
                         runId: run_id,
                         tool_outputs: tool_output_items

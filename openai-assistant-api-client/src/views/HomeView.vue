@@ -3,6 +3,8 @@ import { onMounted, ref, computed, watch } from 'vue'
 
 import { socket, state } from '@/socket'
 
+import VueMarkdown from 'vue-markdown-render'
+
 import ToggleButton from '../components/ToggleButton.vue'
 import DialogName from '../components/DialogName.vue'
 import IconOpenAI from '../components/icons/IconOpenAI.vue'
@@ -15,6 +17,7 @@ import { useAppDataStore } from '../stores/appdata'
 
 const store = useAppDataStore()
 
+const timRef = ref(null)
 const messageRef = ref(null)
 const inputRef = ref(null)
 const userName = ref('')
@@ -174,8 +177,10 @@ function handleSubmitName(value) {
 }
 
 function resetScroll() {
+
+  clearTimeout(timRef.value)
   
-  setTimeout(() => {
+  timRef.value = setTimeout(() => {
     messageRef.value.scrollTop = messageRef.value.scrollHeight
   }, 300)
 
@@ -286,6 +291,14 @@ onMounted(() => {
   }
 
 })
+
+/*
+<div class="message-contents" :class="{ marginLeft: msg.user_id !== userId, marginRight: msg.user_id === userId }">
+          <div class="message-text" :class="getBackgroundClass(msg.role, msg.user_id)">
+          {{ msg.content }}
+            
+          </div>
+        </div>*/
 </script>
 
 <template>
@@ -293,7 +306,9 @@ onMounted(() => {
     <div class="messages" ref="messageRef">
       <div class="message-item" :class="{ rowReverse: msg.user_id !== userId }" v-for="(msg) in messages" :key="msg.id">
         <div class="message-contents" :class="{ marginLeft: msg.user_id !== userId, marginRight: msg.user_id === userId }">
-          <div class="message-text" :class="getBackgroundClass(msg.role, msg.user_id)">{{ msg.content }}</div>
+          <div class="message-text" :class="getBackgroundClass(msg.role, msg.user_id)">
+            <VueMarkdown :source="msg.content" />
+          </div>
         </div>
         <div class="sender" v-if="msg.role !== 'system'">
           <div v-if="msg.role === 'user'" class="avatar">
