@@ -8,8 +8,7 @@ This sample project is a proof-of-concept (POC) demonstration of the [OpenAI Ass
 このサンプルプロジェクトは、[OpenAI Assistants API](https://platform.openai.com/docs/assistants/overview)がシングルスレッドで複数のユーザーとの対話を処理する能力をデモンストレーションするためのプルーフ・オブ・コンセプトです。これは、**Node.js Express**サーバーと**Vue.js**クライアントを使用したフルスタックアプリケーションで、**socket.io**を使用してサーバーとクライアントアプリケーション間のウェブソケットを介した双方向通信を実現しています。
 
 
-**Updated**: [2024-03-26] Implemented actual [Assistants API streaming](#assistants-api-streaming).
-**Updated**: Added [mock streaming](#mock-streaming).
+* **Updated**: [2024-03-26] Implemented actual [Assistants API streaming](#assistants-api-streaming).
 
 # App
 
